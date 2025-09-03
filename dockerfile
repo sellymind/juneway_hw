@@ -1,10 +1,10 @@
 FROM debian:stable-slim as builder
 
-RUN apk update && \
-    apk install -y \
+RUN apt update && \
+    apt install -y \
     wget \
     build-essential \
-    libpcre3-dev \
+    libpcre2-dev \
     zlib1g-dev \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -43,3 +43,14 @@ RUN mkdir -p /etc/nginx/conf.d && \
     mkdir -p /usr/share/nginx/html
 
 COPY --from=builder /nginx-*/conf/nginx.conf /etc/nginx/nginx.conf
+
+RUN echo "<!DOCTYPE html><html><head><title>Nginx Custom Build</title></head><body><h1>Nginx успешно собран из исходников!</h1></body></html>" > /usr/share/nginx/html/index.html
+
+EXPOSE 80 443
+
+VOLUME ["/etc/nginx/conf.d", "/usr/share/nginx/html", "/var/log/nginx"]
+
+HEALTHCHECK --interval=30s --timeout=3s \
+    CMD curl -f http://localhost/ || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]
