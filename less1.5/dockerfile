@@ -6,6 +6,9 @@ RUN apt update && \
     ca-certificates \
     wget \
     build-essential \
+    gnupg \
+    systemd \
+    systemd-sysv \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -28,6 +31,59 @@ RUN apt update && \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+
+# Настраиваем Docker
+RUN mkdir -p /etc/docker && \
+    echo '{"storage-driver": "vfs"}' > /etc/docker/daemon.json
+
+
+# Создаем systemd service
+RUN echo '[Unit]\n\
+Description=Docker Application Container Engine\n\
+Documentation=https://docs.docker.com\n\
+After=network.target\n\
+\n\
+[Service]\n\
+Type=notify\n\
+ExecStart=/usr/bin/dockerd -H unix:///var/run/docker.sock -H tcp://0.0.0.0:2375\n\
+TimeoutSec=0\n\
+RestartSec=2\n\
+Restart=always\n\
+\n\
+[Install]\n\
+WantedBy=multi-user.target' > /etc/systemd/system/docker.service
+
+# Создаем скрипт инициализации
+RUN echo '#!/bin/bash\n\
+\n\
+# Запускаем systemd\n\
+if [ ! -d "/run/systemd/system" ]; then\n\
+    echo "Starting systemd..."\n\
+    /lib/systemd/systemd --system --unit=basic.target &\n\
+    sleep 3\n\
+fi\n\
+\n\
+# Запускаем Docker\n\
+echo "Starting Docker daemon..."\n\
+systemctl start docker\n\
+\n\
+# Ждем запуска Docker\n\
+while ! docker info >/dev/null 2>&1; do\n\
+    echo "Waiting for Docker to start..."\n\
+    sleep 1\n\
+done\n\
+\n\
+echo "Docker is ready!"\n\
+echo "Docker version: $(docker --version)"\n\
+echo "Docker info:"\n\
+docker info | grep -E "Server Version|Containers|Images"\n\
+\n\
+# Запускаем основной процесс\n\
+exec "$@"' > /usr/local/bin/entrypoint.sh
+
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 WORKDIR /work
 
-CMD ["docker", "--version"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["bash"]
